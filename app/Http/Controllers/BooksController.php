@@ -8,6 +8,7 @@ use App\Http\Requests\PostBookRequest;
 use App\Http\Resources\BookResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BooksController extends Controller
 {
@@ -33,17 +34,27 @@ class BooksController extends Controller
     {
         // @TODO implement
         //Insert into table books
-        $data = $request->validated();
-        $book = Book::create($data);
+        DB::beginTransaction();
+        try {
+            $data = $request->validated();
+            $book = Book::create($data);
 
-        $authors = [];
-        foreach ($data['authors'] as $key => $value) {
-            $authors[] = Author::find($value);
+            // Make Sure The Author ID Values Is Really Integer Type
+            $authors = array_map('intval', $data['authors']);
+            $book->authors()->sync($authors);
+
+            DB::commit();
+
+            return new BookResource($book);
+
+        } catch (\Throwable $th) {
+            // Fixing Issue When Insert Data with Rollback
+            DB::rollBack();
+            return response([
+                // "error" => $th->getMessage() // Enable On Development
+                "error" => "Opps! Something went wrong"
+            ], 500);
         }
-
-        $book->authors()->saveMany($authors);
-
-        return new BookResource($book);
 
     }
 }
